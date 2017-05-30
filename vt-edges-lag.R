@@ -1,3 +1,5 @@
+# lines 3-25 here are identical to `vt-generate-edges.R`. Lines afterwards are unique to this script, which seeks to nuance the basic network structure based on time lag between witnesses.
+
 library(tidyverse)
 
 # One of the transformations I most often need for Viral Texts brings us from a list of reprints organized in "clusters"—essentially ennumerative bibliographies—to data that expresses the network relationships among newspapers within those clusters. Essentially I want to reorganize the table so that co-membership in a given cluster creates a line of "edge" data between all the newspapers within that cluster.
@@ -15,13 +17,26 @@ clusters <- do.call(rbind, lapply(files, read_csv)) %>%
   select(cluster, date, title) %>%
   mutate(title = gsub('(.*)\\.*\\(.*','\\1',title)) %>%
   mutate(date = as.Date(date, "%Y-%m-%d"))
-  
+
 # this relatively simple code joins the table to itself, creating a line for each potential edge within a cluster. It then filters those matches so that the output includes only those lines in which the second date follows the first, as network edges cannot generally point backwards in time.
 directed <- full_join(clusters, clusters, by = "cluster") %>%
   filter(date.x < date.y)
 
 View(directed)
 
+# Recently, I've been experimenting with other ways of weighting relationships based on features in my reprinting data. For instance, how might we adjust our weights based on the time lag between two observed reprintings of the same text? The code below is one experiment I've made along those lines. See my post at http://ryancordell.org/research/two-of-three/ for more explication of my thinking here.
+
+lagEdges <- directed %>%
+  mutate(lag = date.y - date.x) %>%
+  mutate(lagWeight = 1 / as.numeric(lag)) %>%
+  group_by(title.x,title.y) %>%
+  summarise(lag =mean(lag), weight = sum(lagWeight), rawWeight = n()) %>%
+  mutate(lagEffect = weight - rawWeight) %>%
+  arrange(desc(weight)) %>%
+  rename(source = title.x, target = title.y)
+
+View(lagEdges)
+
 # write edges to a CSV for use in Gephi or other network visualization software
 
-write.csv(directed, file="./output/FILENAME.csv")
+write.csv(lagEdges, file="./output/FILENAME.csv")
